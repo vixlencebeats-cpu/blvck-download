@@ -1,12 +1,12 @@
 @echo off
-title BLVCK Downloader Server
-echo Starting server and launching browser...
+title BLVCK-DOWNLOAD Server
+echo Starting BLVCK-DOWNLOAD local server...
 
-:: Start the Express server in the background
-start /min node server.js
+:: Navigate to project directory
+cd /d "%~dp0"
 
-:: Wait 2 seconds for Express to boot up
-timeout /t 2 /nobreak > nul
-
-:: Open the website in your default browser
+:: Open the web browser to localhost:5000 in the background
 start http://localhost:5000
+
+:: Start the server and KEEP the terminal window alive
+node server.js
