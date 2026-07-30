@@ -48,7 +48,7 @@ app.get('/api/video-info', async (req, res) => {
       return res.status(400).json({ error: 'Valid YouTube URL is required' });
     }
 
-    console.log('📥 Fetching info for:', url);
+    console.log('Fetching info for:', url);
 
     const videoInfo = await youtubeDl(url, {
       dumpSingleJson: true,
@@ -142,5 +142,5 @@ app.post('/api/download', async (req, res) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });
