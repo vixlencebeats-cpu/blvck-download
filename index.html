@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +9,8 @@
     <!-- Open Graph Meta Tags for Discord Preview -->
     <meta property="og:title" content="BLVCK-DOWNLOAD">
     <meta property="og:description" content="For the homies. enjoy!">
-    <meta property="og:image" content="https://blvckdownload-production.up.railway.app/thumbnail.png">
-    <meta property="og:url" content="https://blvckdownload-production.up.railway.app">
+    <meta property="og:image" content="/thumbnail.png">
+    <meta property="og:url" content="http://localhost:5000">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     
@@ -455,8 +457,8 @@
     </div>
  
     <script>
-        // Configuration
-        const API_URL = 'https://blvck-download.onrender.com';
+        // Configuration - Set dynamically to whatever host/port the app is serving on
+        const API_URL = window.location.origin;
  
         let currentVideo = null;
         let selectedFormat = 'mp4';
@@ -537,11 +539,12 @@
             const items = document.querySelectorAll(`#${id} .dropdown-item`);
             items.forEach(item => item.classList.remove('selected'));
             
-            event.target.closest('.dropdown-item').classList.add('selected');
+            if (event && event.target) {
+                event.target.closest('.dropdown-item').classList.add('selected');
+            }
             
             const btn = document.getElementById(`btn-${id}`);
             btn.textContent = `${quality} (${size})`;
-            btn.querySelector('.dropdown-arrow').textContent = '▼';
             
             document.getElementById(id).classList.remove('open');
             btn.classList.remove('open');
@@ -557,7 +560,9 @@
             document.querySelectorAll('.toggle-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
             
             renderContent();
         }
@@ -606,7 +611,7 @@
  
             const formats = selectedFormat === 'mp4' ? currentVideo.formats.mp4 : currentVideo.formats.mp3;
             
-            formats.forEach((fmt, idx) => {
+            formats.forEach((fmt) => {
                 const selected = selectedResolution && selectedResolution.quality === fmt.quality ? 'selected' : '';
                 html += `
                     <div class="dropdown-item ${selected}" onclick="selectResolution('resolution-dropdown', '${fmt.quality}', '${fmt.size}')">
@@ -681,9 +686,9 @@
                 }
  
                 // Simulate progress completion
-                for (let i = progressFill.offsetWidth; i < 100; i += 10) {
-                    progressFill.style.width = (i + Math.random() * 5) + '%';
-                    progressPercent.textContent = Math.floor(parseFloat(progressFill.style.width));
+                for (let i = 0; i < 100; i += 10) {
+                    progressFill.style.width = i + '%';
+                    progressPercent.textContent = i;
                     await new Promise(r => setTimeout(r, 100));
                 }
  
@@ -694,10 +699,10 @@
                 const contentDiv = document.getElementById('content');
                 const successMsg = document.createElement('div');
                 successMsg.className = 'success';
-                successMsg.innerHTML = `Download complete! File: ${data.filename} (${data.size})`;
+                successMsg.innerHTML = `Download complete! File: ${data.filename}`;
                 contentDiv.insertBefore(successMsg, contentDiv.firstChild);
  
-                // Trigger download
+                // Trigger browser download
                 const link = document.createElement('a');
                 link.href = `${API_URL}${data.downloadUrl}`;
                 link.download = data.filename;
