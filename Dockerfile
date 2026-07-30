@@ -1,21 +1,32 @@
 FROM ubuntu:22.04
 
-# Install Python, pip, Node.js, and ffmpeg in one go
-RUN apt-get update && apt-get install -y \
+# Set non-interactive mode
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install all dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-distutils \
     nodejs \
     npm \
     ffmpeg \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp
-RUN pip3 install --no-cache-dir yt-dlp requests
+# Install yt-dlp using pip3
+RUN pip3 install --upgrade pip && \
+    pip3 install yt-dlp requests
 
-# Verify installation
-RUN yt-dlp --version && node --version && npm --version && ffmpeg -version | head -1
+# Verify installations
+RUN which yt-dlp && \
+    yt-dlp --version && \
+    node --version && \
+    npm --version && \
+    ffmpeg -version | head -1
 
 WORKDIR /app
 
