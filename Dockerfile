@@ -1,33 +1,38 @@
+# Use official Node.js runtime as base image
 FROM node:18-alpine
 
-# Install Python, pip, and ffmpeg
-RUN apk add --no-cache python3 py3-pip ffmpeg curl
+# Install system dependencies including Python and ffmpeg
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    ffmpeg \
+    bash \
+    curl \
+    && rm -rf /var/cache/apk/*
 
-# Upgrade pip and install yt-dlp with all dependencies
-RUN pip install --upgrade pip setuptools wheel
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# Install yt-dlp and requests
 RUN pip install yt-dlp requests
 
-# Verify yt-dlp installation
-RUN yt-dlp --version
+# Verify installation
+RUN which yt-dlp && yt-dlp --version
 
-# Set working directory
+# Set work directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install Node dependencies
+# Install Node.js dependencies
 RUN npm install
 
-# Copy application files
+# Copy application code
 COPY . .
 
 # Expose port
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
-
-# Start the application
+# Run the app
 CMD ["npm", "start"]
