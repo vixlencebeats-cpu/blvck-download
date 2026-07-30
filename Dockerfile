@@ -1,6 +1,6 @@
 FROM node:18-alpine
 
-# Install all dependencies in one go
+# Install system dependencies
 RUN apk add --no-cache \
     python3 \
     py3-pip \
@@ -8,16 +8,17 @@ RUN apk add --no-cache \
     bash \
     curl \
     git \
-    && pip install --upgrade pip \
-    && pip install yt-dlp requests
+    && pip install --upgrade pip
 
-# Verify installation BEFORE proceeding
-RUN echo "=== Verifying yt-dlp ===" && \
-    which yt-dlp && \
-    yt-dlp --version && \
-    which ffmpeg && \
-    ffmpeg -version | head -n 1 && \
-    echo "=== All dependencies verified ===" || exit 1
+# Install yt-dlp with a retry mechanism
+RUN for i in 1 2 3; do pip install yt-dlp requests && break || sleep 2; done
+
+# Verify everything is installed and working
+RUN echo "=== Verifying dependencies ===" && \
+    which python3 && python3 --version && \
+    which yt-dlp && yt-dlp --version && \
+    which ffmpeg && ffmpeg -version | head -n 1 && \
+    echo "=== Verification complete ===" || exit 1
 
 WORKDIR /app
 
@@ -28,5 +29,9 @@ COPY . .
 
 EXPOSE 5000
 
-# Final verification at startup
-CMD sh -c "yt-dlp --version && npm start"
+# Health check to ensure everything works before serving traffic
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD yt-dlp --version > /dev/null 2>&1 || exit 1
+
+# Start server with verification
+CMD sh -c "echo 'Verifying yt-dlp before start...' && yt-dlp --version && echo 'Starting server...' && npm start"
