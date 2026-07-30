@@ -1,3 +1,6 @@
 #!/bin/bash
-pip install yt-dlp
-npm install
+
+echo "Installing yt-dlp and dependencies..."
+pip install --upgrade pip
+pip install yt-dlp requests
+echo "Installation complete!"

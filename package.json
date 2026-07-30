@@ -4,7 +4,8 @@
   "description": "Download YouTube videos and audio with a clean web interface",
   "main": "server.js",
   "scripts": {
-    "postinstall": "pip install --upgrade yt-dlp requests",
+    "build": "bash build.sh",
+    "postinstall": "bash build.sh",
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
