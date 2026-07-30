@@ -10,11 +10,16 @@ const execPromise = util.promisify(exec);
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['https://blvck-download.onrender.com', 'http://localhost:3000', 'http://localhost:5000'],
+  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
+  allowedHeaders: ['Content-Type'],
+  credentials: true
+}));
 app.use(express.json());
 
 // CREATE DOWNLOADS DIRECTORY IF IT DOESN'T EXIST
