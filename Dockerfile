@@ -3,8 +3,8 @@ FROM node:18-alpine
 # Install Python and pip (needed for yt-dlp)
 RUN apk add --no-cache python3 py3-pip ffmpeg
 
-# Install yt-dlp
-RUN pip install yt-dlp
+# Install/upgrade yt-dlp with latest requests
+RUN pip install --upgrade pip && pip install --upgrade yt-dlp requests
 
 # Set working directory
 WORKDIR /app

@@ -2,7 +2,7 @@ services:
   - type: web
     name: blvck-download
     env: node
-    buildCommand: npm install && pip install yt-dlp
+    buildCommand: npm install && pip install --upgrade yt-dlp requests
     startCommand: npm start
     envVars:
       - key: NODE_ENV
