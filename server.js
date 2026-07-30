@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { URL } = require('url');
-const youtubeDl = require('yt-dlp-exec');
+const youtubeDl = require('youtube-dl-exec');
 require('dotenv').config();
 
 const app = express();
