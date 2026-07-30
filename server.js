@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { URL } = require('url');
 const youtubeDl = require('youtube-dl-exec');
+const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config();
 
 const app = express();
@@ -65,8 +66,17 @@ app.get('/api/video-info', async (req, res) => {
       channel: videoInfo.uploader || 'Unknown Channel',
       thumbnail: videoInfo.thumbnail || '',
       formats: {
-        mp4: ['1080p', '720p', '480p', '360p'],
-        mp3: ['320kbps', '192kbps', '128kbps']
+        mp4: [
+          { quality: '1080p', size: '~' },
+          { quality: '720p', size: '~' },
+          { quality: '480p', size: '~' },
+          { quality: '360p', size: '~' }
+        ],
+        mp3: [
+          { quality: '320kbps', size: '~' },
+          { quality: '192kbps', size: '~' },
+          { quality: '128kbps', size: '~' }
+        ]
       }
     };
 
@@ -96,6 +106,7 @@ app.post('/api/download', async (req, res) => {
       output: outputPath,
       noCheckCertificates: true,
       noWarnings: true,
+      ffmpegLocation: ffmpegPath, // Use bundled static FFmpeg for conversion
     };
 
     if (format === 'mp3') {
@@ -104,6 +115,7 @@ app.post('/api/download', async (req, res) => {
       options.audioQuality = '0'; // Best quality
     } else {
       options.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+      options.recodeVideo = 'mp4'; // Forces final output to be strictly MP4 format
     }
 
     await youtubeDl(url, options);
