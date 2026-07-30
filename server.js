@@ -35,6 +35,11 @@ function isValidYouTubeURL(url) {
   }
 }
 
+// Clean titles so Windows/Linux can safely use them as filenames
+function sanitizeFilename(name) {
+  return name.replace(/[/\\?%*:|"<>]/g, '').trim();
+}
+
 // Helper function to format bytes nicely
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return 'Unknown size';
@@ -44,25 +49,23 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-// Estimate file size based on duration (seconds) and format/bitrate
+// Estimate file size based on duration (seconds), format, and quality
 function getEstimatedSize(durationSec, type, quality) {
   if (!durationSec) return 'Size unknown';
 
-  // Average bitrates in Kbps (kilobits per second) including combined audio
   const bitrates = {
-    // Video bitrates (video + audio stream combined)
+    // Video bitrates (Kbps)
     '1080p': 4500,
     '720p': 2500,
     '480p': 1200,
     '360p': 750,
-    // Audio bitrates
+    // Audio bitrates (Kbps)
     '320kbps': 320,
     '192kbps': 192,
     '128kbps': 128
   };
 
-  const bitrateKbps = bitrates[quality] || (type === 'mp4' ? 2000 : 192);
-  // (Bitrate in Kbps * duration) / 8 bits per byte / 1024 to get MB
+  const bitrateKbps = bitrates[quality] || (type === 'mp4' ? 2500 : 192);
   const bytes = (bitrateKbps * 1000 / 8) * durationSec;
   return formatBytes(bytes);
 }
@@ -93,7 +96,6 @@ app.get('/api/video-info', async (req, res) => {
 
     const duration = videoInfo.duration || 0;
 
-    // Build real estimated sizes dynamically based on length
     const info = {
       title: videoInfo.title || 'Unknown Title',
       duration: duration,
@@ -130,11 +132,21 @@ app.post('/api/download', async (req, res) => {
       return res.status(400).json({ error: 'Valid YouTube URL is required' });
     }
 
-    const timestamp = Date.now();
-    const outputFilename = `video_${timestamp}.${format === 'mp3' ? 'mp3' : 'mp4'}`;
+    console.log(`Fetching title for download...`);
+    const videoInfo = await youtubeDl(url, {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true
+    });
+
+    const rawTitle = videoInfo.title || 'downloaded_media';
+    const cleanTitle = sanitizeFilename(rawTitle);
+    const ext = format === 'mp3' ? 'mp3' : 'mp4';
+    
+    const outputFilename = `${cleanTitle}.${ext}`;
     const outputPath = path.join(DOWNLOADS_DIR, outputFilename);
 
-    console.log(`Processing download request: ${format} (${quality})`);
+    console.log(`Processing download request: ${outputFilename} (${quality})`);
 
     const options = {
       output: outputPath,
@@ -147,12 +159,10 @@ app.post('/api/download', async (req, res) => {
       options.extractAudio = true;
       options.audioFormat = 'mp3';
       
-      // Match quality preference
       if (quality === '320kbps') options.audioQuality = '0';
       else if (quality === '192kbps') options.audioQuality = '2';
       else options.audioQuality = '5';
     } else {
-      // Height filter based on selected resolution (e.g., 1080p -> height <= 1080)
       const resNum = parseInt(quality) || 720;
       options.format = `bestvideo[height<=${resNum}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${resNum}][ext=mp4]/best`;
       options.recodeVideo = 'mp4';
@@ -172,7 +182,7 @@ app.post('/api/download', async (req, res) => {
     res.json({
       success: true,
       filename: outputFilename,
-      downloadUrl: `/downloads/${outputFilename}`,
+      downloadUrl: `/downloads/${encodeURIComponent(outputFilename)}`,
       size: formattedSize
     });
 
