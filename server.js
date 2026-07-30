@@ -25,7 +25,6 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
 // Serve downloaded files statically
 app.use('/downloads', express.static(DOWNLOADS_DIR));
 
-// ✅ ADD THIS PART:
 // Serve static files and index.html
 app.use(express.static(__dirname));
 app.get('/', (req, res) => {
@@ -149,6 +148,14 @@ app.post('/api/download', async (req, res) => {
       downloadUrl: `/downloads/${filename}`,
       size: formatBytes(fileSize)
     });
+
+    // Auto-delete file after 5 minutes to save storage
+    setTimeout(() => {
+      if (fs.existsSync(downloadedFile)) {
+        fs.unlinkSync(downloadedFile);
+        console.log(`Auto-deleted after 5 minutes: ${filename}`);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
 
   } catch (error) {
     console.error('Error downloading video:', error.message);
