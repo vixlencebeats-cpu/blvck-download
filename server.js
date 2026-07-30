@@ -111,8 +111,8 @@ app.get('/api/video-info', async (req, res) => {
       try {
         console.log(`⚙️ Attempt ${attempt}/2 - fetching video info...`);
         
-        // Get video info in JSON format with anti-bot workarounds
-        const command = `yt-dlp -j --extractor-args youtube:player_client=web --socket-timeout 30 "${url}"`;
+        // Get video info with multiple anti-bot and CAPTCHA workarounds
+        const command = `yt-dlp -j --extractor-args youtube:player_client=web --socket-timeout 30 --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" "${url}"`;
         
         const { stdout, stderr } = await execPromise(command, { 
           maxBuffer: 10 * 1024 * 1024,
@@ -205,10 +205,10 @@ app.post('/api/download', async (req, res) => {
 
     if (format === 'mp3') {
       const audioQuality = quality === '320kbps' ? '192' : quality === '192kbps' ? '192' : '128';
-      command = `yt-dlp --extractor-args youtube:player_client=web --socket-timeout 30 -f "bestaudio/best" -x --audio-format mp3 --audio-quality ${audioQuality} -o "${outputTemplate}" "${url}"`;
+      command = `yt-dlp --extractor-args youtube:player_client=web --socket-timeout 30 --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -f "bestaudio/best" -x --audio-format mp3 --audio-quality ${audioQuality} -o "${outputTemplate}" "${url}"`;
     } else if (format === 'mp4') {
       const formatCode = getFormatCode(quality);
-      command = `yt-dlp --extractor-args youtube:player_client=web --socket-timeout 30 -f "${formatCode}" --merge-output-format mp4 -o "${outputTemplate}" "${url}"`;
+      command = `yt-dlp --extractor-args youtube:player_client=web --socket-timeout 30 --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -f "${formatCode}" --merge-output-format mp4 -o "${outputTemplate}" "${url}"`;
     }
 
     console.log('⚙️ Executing download command with anti-bot measures');
