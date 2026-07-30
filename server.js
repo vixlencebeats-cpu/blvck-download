@@ -13,8 +13,26 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 
-console.log('🚀 Starting BLVCK-DOWNLOAD server...');
-console.log('PORT:', PORT);
+console.log('🚀 Starting BLVCK-DOWNLOAD with proxy rotation...');
+
+// Multiple user agents to rotate through
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+];
+
+const LANGUAGES = [
+  "en-US,en;q=0.9",
+  "en-GB,en;q=0.8",
+  "de-DE,de;q=0.9",
+  "fr-FR,fr;q=0.9",
+  "es-ES,es;q=0.8",
+];
+
+let requestCount = 0;
 
 // Middleware
 app.use(cors({
@@ -25,7 +43,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// CREATE DOWNLOADS DIRECTORY
 if (!fs.existsSync(DOWNLOADS_DIR)) {
   fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 }
@@ -40,10 +57,24 @@ function isValidYouTubeURL(url) {
   try {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname;
-    return hostname.includes('youtube.com') || hostname.includes('youtu.be') || hostname.includes('youtube-nocookie.com');
+    return hostname.includes('youtube.com') || hostname.includes('youtu.be');
   } catch {
     return false;
   }
+}
+
+// Rotate user agents and headers
+function getRandomHeaders() {
+  requestCount++;
+  const userAgent = USER_AGENTS[requestCount % USER_AGENTS.length];
+  const language = LANGUAGES[requestCount % LANGUAGES.length];
+  
+  return {
+    userAgent,
+    language,
+    // Random Accept-Encoding to vary requests
+    acceptEncoding: Math.random() > 0.5 ? "gzip, deflate" : "gzip, deflate, br"
+  };
 }
 
 app.get('/health', async (req, res) => {
@@ -69,23 +100,26 @@ app.get('/api/video-info', async (req, res) => {
 
     console.log('📥 Fetching info for:', url);
 
-    // Retry logic for YouTube blocks
     let lastError;
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`⚙️ Attempt ${attempt}/2 - fetching video info...`);
+        console.log(`⚙️ Attempt ${attempt}/3 with rotated headers...`);
         
-        // Command with comprehensive anti-bot measures
-        const command = `yt-dlp -j \\
-          --extractor-args youtube:player_client=web,skip=webpage \\
-          --socket-timeout 30 \\
-          --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
-          --http-header "Accept-Language: en-US,en;q=0.9" \\
-          --http-header "Accept-Encoding: gzip, deflate" \\
-          --http-header "DNT: 1" \\
-          --http-header "Sec-Fetch-Dest: document" \\
-          --http-header "Sec-Fetch-Mode: navigate" \\
-          --http-header "Sec-Fetch-Site: none" \\
+        const headers = getRandomHeaders();
+        
+        // Build command with rotating headers
+        const command = `yt-dlp -j \
+          --extractor-args "youtube:player_client=web,skip=webpage" \
+          --socket-timeout 30 \
+          --user-agent "${headers.userAgent}" \
+          --http-header "Accept-Language: ${headers.language}" \
+          --http-header "Accept-Encoding: ${headers.acceptEncoding}" \
+          --http-header "DNT: 1" \
+          --http-header "Sec-Fetch-Dest: document" \
+          --http-header "Sec-Fetch-Mode: navigate" \
+          --http-header "Sec-Fetch-Site: none" \
+          --http-header "Sec-Ch-Ua-Mobile: ?0" \
+          --http-header "Sec-Ch-Ua-Platform: Linux" \
           "${url}"`;
         
         const { stdout, stderr } = await execPromise(command, { 
@@ -113,28 +147,30 @@ app.get('/api/video-info', async (req, res) => {
         lastError = error;
         console.error(`❌ Attempt ${attempt} failed:`, error.message);
         
-        if ((error.message.includes('429') || error.message.includes('Sign in')) && attempt < 2) {
-          console.log('⏳ Rate limited, waiting 5 seconds before retry...');
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        } else {
-          break;
+        if (attempt < 3) {
+          const waitTime = 2000 * attempt; // 2s, 4s, 6s
+          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
     
-    console.error('❌ All retries failed');
-    let errorMsg = 'Failed to fetch video information. YouTube may be blocking requests.';
+    console.error('❌ All retries failed after rotating headers');
+    let errorMsg = 'YouTube is blocking requests. This usually means too many downloads from this server recently.';
+    
     if (lastError.message.includes('Sign in')) {
-      errorMsg = 'YouTube requires authentication. Try again in a moment.';
+      errorMsg = 'YouTube requires sign-in. Try a different video.';
     } else if (lastError.message.includes('429')) {
-      errorMsg = 'Too many requests to YouTube. Wait a few minutes and try again.';
+      errorMsg = 'YouTube rate limiting is active. Try again in a few minutes.';
+    } else if (lastError.message.includes('410')) {
+      errorMsg = 'Video not available or removed.';
     }
     
     res.status(500).json({ error: errorMsg });
     
   } catch (error) {
     console.error('❌ Unexpected error:', error.message);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 
@@ -152,15 +188,17 @@ app.post('/api/download', async (req, res) => {
 
     console.log(`📥 Downloading: ${format} quality: ${quality}`);
 
+    const headers = getRandomHeaders();
     let command = '';
     const timestamp = Date.now();
     const outputTemplate = path.join(DOWNLOADS_DIR, `%(title)s_${timestamp}.%(ext)s`);
 
-    const baseArgs = `--extractor-args youtube:player_client=web,skip=webpage \\
-      --socket-timeout 30 \\
-      --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
-      --http-header "Accept-Language: en-US,en;q=0.9" \\
-      --http-header "Accept-Encoding: gzip, deflate"`;
+    const baseArgs = `--extractor-args "youtube:player_client=web,skip=webpage" \
+      --socket-timeout 30 \
+      --user-agent "${headers.userAgent}" \
+      --http-header "Accept-Language: ${headers.language}" \
+      --http-header "Accept-Encoding: ${headers.acceptEncoding}" \
+      --http-header "DNT: 1"`;
 
     if (format === 'mp3') {
       const audioQuality = quality === '320kbps' ? '192' : '128';
@@ -194,7 +232,6 @@ app.post('/api/download', async (req, res) => {
       size: formatBytes(fileSize)
     });
 
-    // Auto-delete after 5 minutes
     setTimeout(() => {
       if (fs.existsSync(downloadedFile)) {
         fs.unlinkSync(downloadedFile);
@@ -203,12 +240,12 @@ app.post('/api/download', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Download error:', error.message);
-    res.status(500).json({ error: 'Download failed' });
+    res.status(500).json({ error: 'Download failed: ' + error.message });
   }
 });
 
 function getAvailableFormats(videoInfo) {
-  const formats = {
+  return {
     mp4: [
       { quality: '1080p', size: '145 MB', bitrate: '8 Mbps' },
       { quality: '720p', size: '78 MB', bitrate: '4 Mbps' },
@@ -220,7 +257,6 @@ function getAvailableFormats(videoInfo) {
       { quality: '128kbps', size: '22 MB', bitrate: '128 kbps' }
     ]
   };
-  return formats;
 }
 
 function getFormatCode(quality) {
@@ -248,5 +284,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ BLVCK-DOWNLOAD is live at http://localhost:${PORT}`);
+  console.log(`✅ BLVCK-DOWNLOAD is live with proxy rotation!`);
 });
