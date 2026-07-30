@@ -13,31 +13,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 
-console.log('🚀 Starting BLVCK-DOWNLOAD with proxy rotation...');
+console.log('🚀 Starting BLVCK-DOWNLOAD...');
 
-// Multiple user agents to rotate through
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-];
-
-const LANGUAGES = [
-  "en-US,en;q=0.9",
-  "en-GB,en;q=0.8",
-  "de-DE,de;q=0.9",
-  "fr-FR,fr;q=0.9",
-  "es-ES,es;q=0.8",
-];
-
-let requestCount = 0;
-
-// Middleware
 app.use(cors({
-  origin: ['https://blvck-download.onrender.com', 'https://blvck-download.up.railway.app', 'http://localhost:3000', 'http://localhost:5000'],
-  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
+  origin: ['https://blvck-download.up.railway.app', 'http://localhost:3000', 'http://localhost:5000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: true
 }));
@@ -63,26 +43,12 @@ function isValidYouTubeURL(url) {
   }
 }
 
-// Rotate user agents and headers
-function getRandomHeaders() {
-  requestCount++;
-  const userAgent = USER_AGENTS[requestCount % USER_AGENTS.length];
-  const language = LANGUAGES[requestCount % LANGUAGES.length];
-  
-  return {
-    userAgent,
-    language,
-    // Random Accept-Encoding to vary requests
-    acceptEncoding: Math.random() > 0.5 ? "gzip, deflate" : "gzip, deflate, br"
-  };
-}
-
 app.get('/health', async (req, res) => {
   try {
     const { stdout: version } = await execPromise('yt-dlp --version');
     res.json({ status: 'OK', ytdlpVersion: version.trim() });
   } catch (error) {
-    res.status(500).json({ status: 'ERROR', error: 'yt-dlp not found' });
+    res.status(500).json({ status: 'ERROR' });
   }
 });
 
@@ -98,79 +64,44 @@ app.get('/api/video-info', async (req, res) => {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    console.log('📥 Fetching info for:', url);
+    console.log('📥 Fetching:', url);
 
-    let lastError;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        console.log(`⚙️ Attempt ${attempt}/3 with rotated headers...`);
-        
-        const headers = getRandomHeaders();
-        
-        // Build command with rotating headers
-        const command = `yt-dlp -j \
-          --extractor-args "youtube:player_client=web,skip=webpage" \
-          --socket-timeout 30 \
-          --user-agent "${headers.userAgent}" \
-          --http-header "Accept-Language: ${headers.language}" \
-          --http-header "Accept-Encoding: ${headers.acceptEncoding}" \
-          --http-header "DNT: 1" \
-          --http-header "Sec-Fetch-Dest: document" \
-          --http-header "Sec-Fetch-Mode: navigate" \
-          --http-header "Sec-Fetch-Site: none" \
-          --http-header "Sec-Ch-Ua-Mobile: ?0" \
-          --http-header "Sec-Ch-Ua-Platform: Linux" \
-          "${url}"`;
-        
-        const { stdout, stderr } = await execPromise(command, { 
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: 45000 
-        });
-        
-        if (stderr) console.log('⚠️ yt-dlp stderr:', stderr);
-        
-        console.log('✅ Got response, parsing JSON...');
-        const videoInfo = JSON.parse(stdout);
+    // Use -e flag to match youtube playlist items without internet connection
+    const command = `yt-dlp -j \
+      --no-warnings \
+      --socket-timeout 30 \
+      --extractor-args "youtube:lang=en" \
+      "${url}"`;
+    
+    const { stdout } = await execPromise(command, { 
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60000 
+    });
+    
+    const videoInfo = JSON.parse(stdout);
 
-        const info = {
-          title: videoInfo.title || 'Unknown Title',
-          duration: videoInfo.duration || 0,
-          channel: videoInfo.uploader || 'Unknown Channel',
-          thumbnail: videoInfo.thumbnail || '',
-          formats: getAvailableFormats(videoInfo)
-        };
-
-        console.log('✅ Successfully fetched:', info.title);
-        return res.json(info);
-        
-      } catch (error) {
-        lastError = error;
-        console.error(`❌ Attempt ${attempt} failed:`, error.message);
-        
-        if (attempt < 3) {
-          const waitTime = 2000 * attempt; // 2s, 4s, 6s
-          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
+    const info = {
+      title: videoInfo.title || 'Unknown',
+      duration: videoInfo.duration || 0,
+      channel: videoInfo.uploader || 'Unknown',
+      thumbnail: videoInfo.thumbnail || '',
+      formats: {
+        mp4: [
+          { quality: '720p', size: '78 MB' },
+          { quality: '480p', size: '42 MB' }
+        ],
+        mp3: [
+          { quality: '192kbps', size: '33 MB' }
+        ]
       }
-    }
-    
-    console.error('❌ All retries failed after rotating headers');
-    let errorMsg = 'YouTube is blocking requests. This usually means too many downloads from this server recently.';
-    
-    if (lastError.message.includes('Sign in')) {
-      errorMsg = 'YouTube requires sign-in. Try a different video.';
-    } else if (lastError.message.includes('429')) {
-      errorMsg = 'YouTube rate limiting is active. Try again in a few minutes.';
-    } else if (lastError.message.includes('410')) {
-      errorMsg = 'Video not available or removed.';
-    }
-    
-    res.status(500).json({ error: errorMsg });
+    };
+
+    console.log('✅ Got:', info.title);
+    res.json(info);
     
   } catch (error) {
-    console.error('❌ Unexpected error:', error.message);
-    res.status(500).json({ error: 'Server error: ' + error.message });
+    console.error('❌ Error:', error.message);
+    res.status(500).json({ error: 'YouTube is blocking requests from this server. Try: 1) Using a VPN 2) Waiting 10 mins 3) Different video' });
   }
 });
 
@@ -179,36 +110,31 @@ app.post('/api/download', async (req, res) => {
     const { url, format, quality } = req.body;
 
     if (!url || !format) {
-      return res.status(400).json({ error: 'URL and format required' });
+      return res.status(400).json({ error: 'Required fields missing' });
     }
 
-    if (!isValidYouTubeURL(url)) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+    console.log(`📥 Downloading ${format}...`);
 
-    console.log(`📥 Downloading: ${format} quality: ${quality}`);
-
-    const headers = getRandomHeaders();
-    let command = '';
     const timestamp = Date.now();
     const outputTemplate = path.join(DOWNLOADS_DIR, `%(title)s_${timestamp}.%(ext)s`);
 
-    const baseArgs = `--extractor-args "youtube:player_client=web,skip=webpage" \
-      --socket-timeout 30 \
-      --user-agent "${headers.userAgent}" \
-      --http-header "Accept-Language: ${headers.language}" \
-      --http-header "Accept-Encoding: ${headers.acceptEncoding}" \
-      --http-header "DNT: 1"`;
-
+    let command;
     if (format === 'mp3') {
-      const audioQuality = quality === '320kbps' ? '192' : '128';
-      command = `yt-dlp ${baseArgs} -f "bestaudio/best" -x --audio-format mp3 --audio-quality ${audioQuality} -o "${outputTemplate}" "${url}"`;
+      command = `yt-dlp \
+        --no-warnings \
+        -f "bestaudio/best" \
+        -x --audio-format mp3 \
+        -o "${outputTemplate}" \
+        "${url}"`;
     } else {
-      const formatCode = getFormatCode(quality);
-      command = `yt-dlp ${baseArgs} -f "${formatCode}" --merge-output-format mp4 -o "${outputTemplate}" "${url}"`;
+      command = `yt-dlp \
+        --no-warnings \
+        -f "best[height<=720]" \
+        -o "${outputTemplate}" \
+        "${url}"`;
     }
 
-    const { stdout, stderr } = await execPromise(command, { 
+    await execPromise(command, { 
       maxBuffer: 10 * 1024 * 1024,
       timeout: 600000
     });
@@ -217,72 +143,31 @@ app.post('/api/download', async (req, res) => {
       .filter(f => f.includes(timestamp))
       .sort((a, b) => fs.statSync(path.join(DOWNLOADS_DIR, b)).mtime - fs.statSync(path.join(DOWNLOADS_DIR, a)).mtime);
 
-    if (files.length === 0) {
+    if (!files.length) {
       return res.status(500).json({ error: 'Download failed' });
     }
 
-    const downloadedFile = path.join(DOWNLOADS_DIR, files[0]);
-    const fileSize = fs.statSync(downloadedFile).size;
-    const filename = files[0];
+    const file = path.join(DOWNLOADS_DIR, files[0]);
+    const size = Math.round(fs.statSync(file).size / (1024 * 1024)) + ' MB';
 
     res.json({
       success: true,
-      filename: filename,
-      downloadUrl: `/downloads/${filename}`,
-      size: formatBytes(fileSize)
+      filename: files[0],
+      downloadUrl: `/downloads/${files[0]}`,
+      size: size
     });
 
+    // Delete after 5 minutes
     setTimeout(() => {
-      if (fs.existsSync(downloadedFile)) {
-        fs.unlinkSync(downloadedFile);
-      }
+      if (fs.existsSync(file)) fs.unlinkSync(file);
     }, 5 * 60 * 1000);
 
   } catch (error) {
-    console.error('❌ Download error:', error.message);
-    res.status(500).json({ error: 'Download failed: ' + error.message });
+    console.error('❌ Download failed:', error.message);
+    res.status(500).json({ error: 'Download failed' });
   }
 });
 
-function getAvailableFormats(videoInfo) {
-  return {
-    mp4: [
-      { quality: '1080p', size: '145 MB', bitrate: '8 Mbps' },
-      { quality: '720p', size: '78 MB', bitrate: '4 Mbps' },
-      { quality: '480p', size: '42 MB', bitrate: '2 Mbps' }
-    ],
-    mp3: [
-      { quality: '320kbps', size: '55 MB', bitrate: '320 kbps' },
-      { quality: '192kbps', size: '33 MB', bitrate: '192 kbps' },
-      { quality: '128kbps', size: '22 MB', bitrate: '128 kbps' }
-    ]
-  };
-}
-
-function getFormatCode(quality) {
-  const codes = {
-    '1080': 'bestvideo[height<=1080]+bestaudio/best',
-    '720': 'bestvideo[height<=720]+bestaudio/best',
-    '480': 'bestvideo[height<=480]+bestaudio/best',
-  };
-  const match = quality.match(/\d+/);
-  const number = match ? match[0] : '720';
-  return codes[number] || codes['720'];
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-}
-
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Server error' });
-});
-
 app.listen(PORT, () => {
-  console.log(`✅ BLVCK-DOWNLOAD is live with proxy rotation!`);
+  console.log(`✅ Live!`);
 });
