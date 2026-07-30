@@ -1,7 +1,8 @@
 # BLVCK-DOWNLOAD
    
-   Self-hosted YouTube downloader - runs on YOUR machine!
+   Run Install.bat for Windows
+   Run Install.sh for Mac
+
+   Wait for the installation process to complete. Press any key to continue, Start downloading!
    
-   **No cloud server, no IP blocking, no rate limiting.**
-   
-   👉 [See Self-Hosted Setup Guide](README-SELFHOSTED.md)
+   **Self-hosted Youtube-Downloader no reCAPTCHA - no Cookies unlimited use, Secure & private.**
