@@ -105,52 +105,75 @@ app.get('/api/video-info', async (req, res) => {
       return res.status(500).json({ error: 'Server error: yt-dlp not installed' });
     }
 
-    // Get video info in JSON format with anti-bot workarounds
-    const command = `yt-dlp -j --extractor-args youtube:player_client=web --socket-timeout 30 "${url}"`;
-    console.log('⚙️ Running command with anti-bot measures...');
-    
-    const { stdout, stderr } = await execPromise(command, { 
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: 45000 
-    });
-    
-    if (stderr) console.log('⚠️ yt-dlp stderr:', stderr);
-    
-    console.log('✅ Got response, parsing JSON...');
-    const videoInfo = JSON.parse(stdout);
+    // Retry logic for rate limiting
+    let lastError;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`⚙️ Attempt ${attempt}/2 - fetching video info...`);
+        
+        // Get video info in JSON format with anti-bot workarounds
+        const command = `yt-dlp -j --extractor-args youtube:player_client=web --socket-timeout 30 "${url}"`;
+        
+        const { stdout, stderr } = await execPromise(command, { 
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 45000 
+        });
+        
+        if (stderr) console.log('⚠️ yt-dlp stderr:', stderr);
+        
+        console.log('✅ Got response, parsing JSON...');
+        const videoInfo = JSON.parse(stdout);
 
-    // Extract relevant information
-    const info = {
-      title: videoInfo.title || 'Unknown Title',
-      duration: videoInfo.duration || 0,
-      channel: videoInfo.uploader || 'Unknown Channel',
-      thumbnail: videoInfo.thumbnail || '',
-      formats: getAvailableFormats(videoInfo)
-    };
+        // Extract relevant information
+        const info = {
+          title: videoInfo.title || 'Unknown Title',
+          duration: videoInfo.duration || 0,
+          channel: videoInfo.uploader || 'Unknown Channel',
+          thumbnail: videoInfo.thumbnail || '',
+          formats: getAvailableFormats(videoInfo)
+        };
 
-    console.log('✅ Successfully fetched:', info.title);
-    res.json(info);
+        console.log('✅ Successfully fetched:', info.title);
+        return res.json(info);
+        
+      } catch (error) {
+        lastError = error;
+        console.error(`❌ Attempt ${attempt} failed:`, error.message);
+        
+        // If it's a rate limit error and we have retries left, wait and retry
+        if ((error.message.includes('429') || error.message.includes('Sign in')) && attempt < 2) {
+          console.log('⏳ Rate limited, waiting 3 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+          break; // Don't retry for other errors
+        }
+      }
+    }
     
-  } catch (error) {
-    console.error('❌ ERROR in /api/video-info:');
-    console.error('   Message:', error.message);
+    // If we got here, all retries failed
+    console.error('❌ ERROR in /api/video-info after retries:');
+    console.error('   Message:', lastError.message);
     
     let errorMsg = 'Failed to fetch video information. Check URL and try again.';
-    if (error.message.includes('Sign in to confirm')) {
+    if (lastError.message.includes('Sign in to confirm')) {
       errorMsg = 'YouTube blocked the request. Please try again in a few moments.';
-    } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-      errorMsg = 'Too many requests to YouTube. Please wait a moment and try again.';
-    } else if (error.message.includes('yt-dlp')) {
+    } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+      errorMsg = 'Too many requests to YouTube. Please wait a few moments and try again.';
+    } else if (lastError.message.includes('yt-dlp')) {
       errorMsg = 'yt-dlp is not installed on server';
-    } else if (error.message.includes('JSON')) {
+    } else if (lastError.message.includes('JSON')) {
       errorMsg = 'Invalid response from yt-dlp - video might be unavailable';
-    } else if (error.message.includes('timeout')) {
+    } else if (lastError.message.includes('timeout')) {
       errorMsg = 'Request timeout - try a different video';
-    } else if (error.message.includes('404')) {
+    } else if (lastError.message.includes('404')) {
       errorMsg = 'Video not found - check the URL';
     }
     
     res.status(500).json({ error: errorMsg });
+    
+  } catch (error) {
+    console.error('❌ Unexpected error in /api/video-info:', error.message);
+    res.status(500).json({ error: 'Unexpected server error' });
   }
 });
 
