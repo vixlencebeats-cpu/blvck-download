@@ -1,24 +1,15 @@
-FROM node:18-alpine
+# Use an image that already has yt-dlp pre-installed
+FROM jauderho/yt-dlp:latest
 
-# Install system dependencies
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    ffmpeg \
-    bash \
+# Install Node.js on top of the yt-dlp image
+RUN apt-get update && apt-get install -y \
     curl \
-    git \
-    && pip install --upgrade pip
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp with a retry mechanism
-RUN for i in 1 2 3; do pip install yt-dlp requests && break || sleep 2; done
-
-# Verify everything is installed and working
-RUN echo "=== Verifying dependencies ===" && \
-    which python3 && python3 --version && \
-    which yt-dlp && yt-dlp --version && \
-    which ffmpeg && ffmpeg -version | head -n 1 && \
-    echo "=== Verification complete ===" || exit 1
+# Verify everything works
+RUN yt-dlp --version && node --version && npm --version
 
 WORKDIR /app
 
@@ -29,9 +20,4 @@ COPY . .
 
 EXPOSE 5000
 
-# Health check to ensure everything works before serving traffic
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD yt-dlp --version > /dev/null 2>&1 || exit 1
-
-# Start server with verification
-CMD sh -c "echo 'Verifying yt-dlp before start...' && yt-dlp --version && echo 'Starting server...' && npm start"
+CMD ["npm", "start"]
