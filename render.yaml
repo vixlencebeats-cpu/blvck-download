@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: blvck-download
-    env: node
-    buildCommand: bash build.sh
-    startCommand: node server.js
-    envVars:
-      - key: NODE_ENV
-        value: production
