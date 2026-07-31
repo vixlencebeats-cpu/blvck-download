@@ -1,11 +1,11 @@
-# 🎵 BLVCK-DOWNLOAD
+# ⬇ BLVCK-DOWNLOAD
 
 > **A fast, self-hosted YouTube downloader.**  
 > No ads • No cookies • No reCAPTCHA!
 
 ---
 
-## ✨ Features
+## 🔥 Features
 
 * **Ad-Free Experience:** Download media directly without dealing with popups or intrusive ads.
 * **Privacy-Focused:** No tracking cookies or reCAPTCHA verification required.
@@ -14,7 +14,7 @@
 
 ---
 
-## 🚀 Installation & Setup
+## 📥 Installation & Setup
 
 ### For Windows Users (Recommended)
 
